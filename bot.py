@@ -69,7 +69,14 @@ async def init_xhs():
         record_data=False,
         download_record=False,
         folder_mode=False,
-        _print=False,  # 禁用打印输出
+        _print=True,  # 禁用打印输出
+
+        # image_format="PNG",
+        image_format="WEBP",
+        # image_format="JPEG",
+        # image_format="HEIC",
+        # image_format="AVIF",
+        # image_format="AUTO",
     )
     await xhs_instance.__aenter__()
     return xhs_instance
