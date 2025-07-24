@@ -172,47 +172,69 @@ def handle_message(message):
                                         message_id=processing_msg.message_id)
                     return
 
-                bot.edit_message_text(f"解析成功！共找到 {len(download_urls)} 个文件，正在下载并打包发送...",
+                bot.edit_message_text(f"解析成功！共找到 {len(download_urls)} 个文件，正在发送...",
                                     chat_id=message.chat.id, 
                                     message_id=processing_msg.message_id)
 
-                # 下载所有文件并创建媒体组
+                # 创建媒体组，直接使用URL
                 media_group = []
                 for index, dl_url in enumerate(download_urls):
                     try:
-                        logger.info(f"正在下载第 {index + 1}/{len(download_urls)} 个文件: {dl_url}")
-                        media_response = requests.get(dl_url, stream=True, timeout=120)
-                        media_response.raise_for_status()
-
-                        content = media_response.content
-
+                        logger.info(f"添加第 {index + 1}/{len(download_urls)} 个文件到媒体组: {dl_url}")
+                        
                         if media_type in ['视频', 'video']:
-                            media_group.append(InputMediaVideo(media=content))
+                            media_group.append(InputMediaVideo(media=dl_url))
                         elif media_type in ['图文', '图集', 'image']:
-                            media_group.append(InputMediaPhoto(media=content))
-                        else:  # 如果类型未知，则单独作为文件发送
-                            bot.send_document(message.chat.id, content, 
-                                            caption=f"来自: {user_url}", timeout=120)
+                            media_group.append(InputMediaPhoto(media=dl_url))
+                        else:
+                            # 对于未知类型，仍然尝试作为图片发送
+                            media_group.append(InputMediaPhoto(media=dl_url))
 
-                    except requests.exceptions.RequestException as e:
-                        logger.error(f"下载文件失败: {dl_url}, 错误: {e}", exc_info=True)
-                        bot.send_message(message.chat.id, f"下载第 {index + 1} 个文件时出错，已跳过。")
+                    except Exception as e:
+                        logger.error(f"添加文件到媒体组失败: {dl_url}, 错误: {e}", exc_info=True)
+                        # 继续处理其他文件
 
-                # 发送媒体组
+                # 发送媒体组作为回复
                 if media_group:
-                    # 给媒体组的第一个元素添加标题
-                    media_group[0].caption = f"共 {len(media_group)} 个文件\n来源: {user_url}"
+                    # 给媒体组的第一个元素添加简化的标题
+                    media_group[0].caption = f"共 {len(media_group)} 个文件"
 
                     logger.info(f"准备发送 {len(media_group)} 个媒体文件...")
                     # Telegram 一次最多发送10个, 所以需要分块
                     for i in range(0, len(media_group), 10):
                         chunk = media_group[i:i + 10]
                         try:
-                            bot.send_media_group(message.chat.id, chunk, timeout=180)
+                            # 使用reply_to_message_id回复原始消息
+                            bot.send_media_group(
+                                chat_id=message.chat.id, 
+                                media=chunk, 
+                                reply_to_message_id=message.message_id,
+                                timeout=180
+                            )
                         except Exception as e:
                             logger.error(f"发送媒体组失败: {e}", exc_info=True)
-                            bot.send_message(message.chat.id, "发送媒体组时遇到错误，请稍后再试。")
+                            # 如果媒体组发送失败，尝试逐个发送
+                            for media_item in chunk:
+                                try:
+                                    if isinstance(media_item, InputMediaVideo):
+                                        bot.send_video(
+                                            chat_id=message.chat.id,
+                                            video=media_item.media,
+                                            reply_to_message_id=message.message_id,
+                                            timeout=120
+                                        )
+                                    else:
+                                        bot.send_photo(
+                                            chat_id=message.chat.id,
+                                            photo=media_item.media,
+                                            reply_to_message_id=message.message_id,
+                                            timeout=120
+                                        )
+                                except Exception as single_error:
+                                    logger.error(f"单独发送媒体失败: {media_item.media}, 错误: {single_error}")
+                                    bot.reply_to(message, f"发送媒体文件时出错，已跳过一个文件。")
 
+                # 删除处理中的消息
                 bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
             else:
                 error_message = data.get('message', '无法解析此链接，未找到下载地址。')
