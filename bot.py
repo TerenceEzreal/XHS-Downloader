@@ -122,7 +122,7 @@ def format_work_info(data):
     
     title = data.get('作品标题', '未知')
     if title and title != '未知':
-        info_lines.append(f"📝标题 {title}")
+        info_lines.append(f"📝标题: {title}")
     
     description = data.get('作品描述', '')
     if description:
@@ -131,16 +131,16 @@ def format_work_info(data):
         # 扩大描述长度限制
         desc = description[:150] + "..." if len(description) > 150 else description
         if desc:
-            info_lines.append(f"📄 {desc}")
+            info_lines.append(f"📄描述: {desc}")
     
     publish_time = data.get('发布时间', '未知')
     if publish_time and publish_time != '未知':
         formatted_time = format_publish_time(publish_time)
-        info_lines.append(f"⏰时间 {formatted_time}")
+        info_lines.append(f"⏰时间: {formatted_time}")
 
     author = data.get('作者昵称', '未知')
     if author and author != '未知':
-        info_lines.append(f"🦊作者 {author}")
+        info_lines.append(f"🦊作者: {author}")
     
     return "\n".join(info_lines)
 
