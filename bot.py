@@ -238,21 +238,31 @@ def handle_confirmation(call):
     
     urls = user_pending_urls[user_id]
     del user_pending_urls[user_id]
-    
-    bot.edit_message_text(f"开始处理 {len(urls)} 个链接...", call.message.chat.id, call.message.message_id)
+
+    # 删除确认消息
+    bot.delete_message(call.message.chat.id, call.message.message_id)
     bot.answer_callback_query(call.id, "开始处理")
-    
+
+
+
     # 处理所有URL
     process_multiple_urls(call.message, urls)
 
 def process_single_url(message, url):
     """处理单个URL"""
-    processing_msg = bot.reply_to(message, "正在处理链接，请稍候...")
-    
+    processing_msg = bot.reply_to(message, "正在解析，请稍候...")
+    # 删除处理消息
+    bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
+    # 发送新的发送消息
+    sending_msg = bot.send_message(message.chat.id, "正在发送，请稍候...",
+                                   reply_to_message_id=message.message_id)
+
     try:
         result = extract_and_send_media(url, message, processing_msg)
         if result:
-            bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
+
+            # 发送完成后删除发送消息
+            bot.delete_message(chat_id=message.chat.id, message_id=sending_msg.message_id)
     except Exception as e:
         logger.error(f"处理单个URL时发生错误: {e}", exc_info=True)
         bot.edit_message_text("处理过程中发生错误，请稍后重试。", 
