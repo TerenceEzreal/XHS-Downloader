@@ -175,8 +175,15 @@ user_pending_urls = {}
 def send_welcome(message):
     """处理 /start 和 /help 命令"""
     welcome_text = """
-你好！欢迎使用URL内容下载机器人。
-请直接向我发送包含有效网址的链接，我将尝试解析并下载其中的图片或视频。
+🐱 喵~ 欢迎使用小红书内容下载机器人喵！
+
+主人只需要发送小红书链接给我，我就会帮你下载里面的图片和视频哦~ 
+快来试试吧，喵呜~ ✨
+
+💡 使用提示：
+• 直接发送小红书链接即可
+• 支持批量处理多个链接
+• 图片视频都能下载喵~
 """
     bot.reply_to(message, welcome_text)
 
@@ -191,7 +198,7 @@ def handle_message(message):
     extracted_urls = extract_urls_from_text(user_text)
     
     if not extracted_urls:
-        bot.reply_to(message, "未检测到有效的URL，请发送包含小红书链接的消息。")
+        bot.reply_to(message, "喵~ 没有检测到小红书链接呢，请发送包含小红书链接的消息给我吧~ 🐾")
         return
     
     # 如果只有一个URL且文本就是这个URL，直接处理
@@ -203,12 +210,12 @@ def handle_message(message):
     user_pending_urls[user_id] = extracted_urls
     
     urls_text = "\n".join([f"{i+1}. {url}" for i, url in enumerate(extracted_urls)])
-    confirm_text = f"检测到 {len(extracted_urls)} 个链接：\n\n{urls_text}\n\n是否处理这些链接？"
+    confirm_text = f"喵~ 我发现了 {len(extracted_urls)} 个链接呢：\n\n{urls_text}\n\n要帮主人处理这些链接吗？🐱✨"
     
     markup = InlineKeyboardMarkup()
     markup.row(
-        InlineKeyboardButton("✅ 确认处理", callback_data=f"confirm_{user_id}"),
-        InlineKeyboardButton("❌ 取消", callback_data=f"cancel_{user_id}")
+        InlineKeyboardButton("✅ 好的喵~", callback_data=f"confirm_{user_id}"),
+        InlineKeyboardButton("❌ 不用了", callback_data=f"cancel_{user_id}")
     )
     
     bot.reply_to(message, confirm_text, reply_markup=markup)
@@ -221,19 +228,19 @@ def handle_confirmation(call):
     
     # 验证用户身份
     if str(user_id) != callback_user_id:
-        bot.answer_callback_query(call.id, "无效操作")
+        bot.answer_callback_query(call.id, "喵？这不是你的操作呢~")
         return
     
     if action == "cancel":
         if user_id in user_pending_urls:
             del user_pending_urls[user_id]
-        bot.edit_message_text("操作已取消", call.message.chat.id, call.message.message_id)
-        bot.answer_callback_query(call.id, "已取消")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        bot.answer_callback_query(call.id, "好的喵~ 已取消")
         return
     
     # 确认处理
     if user_id not in user_pending_urls:
-        bot.answer_callback_query(call.id, "链接已过期，请重新发送")
+        bot.answer_callback_query(call.id, "喵？链接好像过期了，请重新发送吧~")
         return
     
     urls = user_pending_urls[user_id]
@@ -241,7 +248,7 @@ def handle_confirmation(call):
 
     # 删除确认消息
     bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.answer_callback_query(call.id, "开始处理")
+    bot.answer_callback_query(call.id, "收到喵~ 开始处理")
 
 
 
@@ -250,11 +257,11 @@ def handle_confirmation(call):
 
 def process_single_url(message, url):
     """处理单个URL"""
-    processing_msg = bot.reply_to(message, "正在解析，请稍候...")
+    processing_msg = bot.reply_to(message, "喵~ 正在努力解析链接中，请稍等一下下...")
     # 删除处理消息
     bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
     # 发送新的发送消息
-    sending_msg = bot.send_message(message.chat.id, "正在发送，请稍候...",
+    sending_msg = bot.send_message(message.chat.id, "喵呜~ 正在发送给主人，马上就好...",
                                    reply_to_message_id=message.message_id)
 
     try:
@@ -265,7 +272,7 @@ def process_single_url(message, url):
             bot.delete_message(chat_id=message.chat.id, message_id=sending_msg.message_id)
     except Exception as e:
         logger.error(f"处理单个URL时发生错误: {e}", exc_info=True)
-        bot.edit_message_text("处理过程中发生错误，请稍后重试。", 
+        bot.edit_message_text("呜呜~ 处理过程中出现了问题，请稍后重试吧...",
                             chat_id=message.chat.id, message_id=processing_msg.message_id)
 
 def process_multiple_urls(message, urls):
@@ -275,7 +282,7 @@ def process_multiple_urls(message, urls):
     for index, url in enumerate(urls, 1):
         try:
             status_msg = bot.send_message(message.chat.id, 
-                                        f"正在处理第 {index}/{total} 个链接...",
+                                        f"喵~ 正在处理第 {index}/{total} 个链接...",
                                         reply_to_message_id=message.message_id)
             
             result = extract_and_send_media(url, message, status_msg)
@@ -283,12 +290,12 @@ def process_multiple_urls(message, urls):
             if result:
                 bot.delete_message(chat_id=message.chat.id, message_id=status_msg.message_id)
             else:
-                bot.edit_message_text(f"第 {index} 个链接处理失败", 
+                bot.edit_message_text(f"呜~ 第 {index} 个链接处理失败了...",
                                     chat_id=message.chat.id, message_id=status_msg.message_id)
                 
         except Exception as e:
             logger.error(f"处理第 {index} 个URL时发生错误: {e}", exc_info=True)
-            bot.send_message(message.chat.id, f"第 {index} 个链接处理失败: {str(e)[:100]}")
+            bot.send_message(message.chat.id, f"喵~ 第 {index} 个链接出现问题了: {str(e)[:100]}")
 
 def extract_and_send_media(url, original_message, processing_msg):
     """提取并发送媒体文件"""
@@ -311,7 +318,7 @@ def extract_and_send_media(url, original_message, processing_msg):
         results = run_async(process_url())
         
         if not results or len(results) == 0:
-            bot.edit_message_text("解析失败，请检查链接是否有效。", 
+            bot.edit_message_text("呜~ 解析失败了，请检查链接是否正确呢...",
                                 chat_id=original_message.chat.id, 
                                 message_id=processing_msg.message_id)
             return False
@@ -319,7 +326,7 @@ def extract_and_send_media(url, original_message, processing_msg):
         data = results[0]
         
         if not data or not data.get('下载地址'):
-            error_message = data.get('message', '无法解析此链接，未找到下载地址。') if data else '解析失败'
+            error_message = data.get('message', '喵~ 无法解析此链接，没有找到下载地址呢...') if data else '呜~ 解析失败了...'
             bot.edit_message_text(error_message, 
                                 chat_id=original_message.chat.id, 
                                 message_id=processing_msg.message_id)
@@ -336,7 +343,7 @@ def extract_and_send_media(url, original_message, processing_msg):
         media_type = data.get('作品类型', '未知')
 
         if not download_urls:
-            bot.edit_message_text("解析成功，但未找到有效的下载链接。", 
+            bot.edit_message_text("喵~ 解析成功了，但是没有找到有效的下载链接呢...",
                                 chat_id=original_message.chat.id,
                                 message_id=processing_msg.message_id)
             return False
@@ -397,7 +404,7 @@ def extract_and_send_media(url, original_message, processing_msg):
                                     caption_parts.append(work_info)
                                 caption_parts.append(f"📁 共 {len(download_urls)} 个文件")
                                 if total_chunks > 1:
-                                    caption_parts.append(f"📦 分片: [{current_chunk}/{total_chunks}]")
+                                    caption_parts.append(f"🎁 包裹: [{current_chunk}/{total_chunks}]")
                                 caption = "\n\n".join(caption_parts)
                             
                             if isinstance(media_item, InputMediaVideo):
@@ -423,7 +430,7 @@ def extract_and_send_media(url, original_message, processing_msg):
 
     except Exception as e:
         logger.error(f"提取和发送媒体时发生错误: {e}", exc_info=True)
-        bot.edit_message_text("处理过程中发生未知错误，请联系管理员。", 
+        bot.edit_message_text("呜呜~ 处理过程中发生了未知错误，请联系管理喵...",
                             chat_id=original_message.chat.id,
                             message_id=processing_msg.message_id)
         return False
