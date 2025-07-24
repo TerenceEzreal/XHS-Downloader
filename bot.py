@@ -100,6 +100,7 @@ def is_valid_url(url):
     """使用正则表达式简单验证URL格式"""
     if not isinstance(url, str):
         return False
+    
     regex = re.compile(
         r'^(?:http|ftp)s?://'  # http:// or https://
         r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
@@ -125,19 +126,18 @@ def format_work_info(data):
     
     description = data.get('作品描述', '')
     if description:
-        # 限制描述长度，避免消息过长
-        desc = description[:80] + "..." if len(description) > 80 else description
-        info_lines.append(f"📄 {desc}")
-    
-    work_type = data.get('作品类型', '未知')
-    if work_type and work_type != '未知':
-        info_lines.append(f"🎬 {work_type}")
+        # 移除方括号表情
+        description = re.sub(r'\[.*?]', '', description).strip()
+        # 扩大描述长度限制
+        desc = description[:150] + "..." if len(description) > 150 else description
+        if desc:
+            info_lines.append(f"📄 {desc}")
     
     publish_time = data.get('发布时间', '未知')
     if publish_time and publish_time != '未知':
         formatted_time = format_publish_time(publish_time)
         info_lines.append(f"⏰ {formatted_time}")
-    
+
     author = data.get('作者昵称', '未知')
     if author and author != '未知':
         info_lines.append(f"👤 {author}")
@@ -147,6 +147,10 @@ def format_work_info(data):
 def format_publish_time(time_str):
     """格式化发布时间"""
     try:
+        # 处理下划线分隔的格式: 2025-07-08_06:00:48
+        if '_' in time_str:
+            time_str = time_str.replace('_', ' ')
+        
         # 尝试解析常见的时间格式
         if '-' in time_str and ':' in time_str:
             # 格式如: 2024-01-15 14:30:25
@@ -356,9 +360,6 @@ def extract_and_send_media(url, original_message, processing_msg):
                         # 添加作品信息
                         if work_info:
                             caption_parts.append(work_info)
-                        
-                        # 添加文件数量信息
-                        caption_parts.append(f"📁 共 {len(download_urls)} 个文件")
                         
                         # 如果需要分片，添加分片信息
                         if total_chunks > 1:
