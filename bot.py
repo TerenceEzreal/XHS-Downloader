@@ -122,7 +122,7 @@ def format_work_info(data):
     
     title = data.get('作品标题', '未知')
     if title and title != '未知':
-        info_lines.append(f"📝 {title}")
+        info_lines.append(f"📝标题 {title}")
     
     description = data.get('作品描述', '')
     if description:
@@ -136,11 +136,11 @@ def format_work_info(data):
     publish_time = data.get('发布时间', '未知')
     if publish_time and publish_time != '未知':
         formatted_time = format_publish_time(publish_time)
-        info_lines.append(f"⏰ {formatted_time}")
+        info_lines.append(f"⏰时间 {formatted_time}")
 
     author = data.get('作者昵称', '未知')
     if author and author != '未知':
-        info_lines.append(f"👤 {author}")
+        info_lines.append(f"🦊作者 {author}")
     
     return "\n".join(info_lines)
 
@@ -183,7 +183,7 @@ def send_welcome(message):
 💡 使用提示：
 • 直接发送小红书链接即可
 • 支持批量处理多个链接
-• 图片视频都能下载喵~
+• 图片视频都能下载的喵~
 """
     bot.reply_to(message, welcome_text)
 
@@ -198,7 +198,7 @@ def handle_message(message):
     extracted_urls = extract_urls_from_text(user_text)
     
     if not extracted_urls:
-        bot.reply_to(message, "喵~ 没有检测到小红书链接呢，请发送包含小红书链接的消息给我吧~ 🐾")
+        bot.reply_to(message, "喵~ 没有发现小红书链接呢，请发送包含小红书链接的消息给我吧~ 🐾")
         return
     
     # 如果只有一个URL且文本就是这个URL，直接处理
