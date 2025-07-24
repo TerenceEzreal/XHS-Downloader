@@ -144,7 +144,7 @@ def handle_message(message):
             # 直接调用XHS的extract方法
             results = await xhs_instance.extract(
                 user_url,
-                download=False,  # 我们不需要下载到本地，而是获取URL
+                download=True,
                 data=True
             )
             
