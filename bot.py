@@ -433,14 +433,16 @@ def handle_confirmation(call):
 
     user_manager.remove_pending_urls(user_id)
 
-    # 删除确认消息
-    bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.answer_callback_query(call.id, "收到喵~ 开始处理")
+    # 编辑确认消息为开始处理状态
+    bot.edit_message_text(
+        "🚀 收到喵~ 开始处理链接...",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id
+    )
+    bot.answer_callback_query(call.id, "开始处理")
 
-
-
-    # 处理所有URL
-    process_multiple_urls(call.message, urls)
+    # 处理所有URL，传递聊天信息而不是消息对象
+    process_multiple_urls(call.message.chat.id, urls, user_id)
 
 def process_single_url(message, url):
     """处理单个URL"""
@@ -462,26 +464,36 @@ def process_single_url(message, url):
         bot.edit_message_text("呜呜~ 处理过程中出现了问题，请稍后重试吧...",
                             chat_id=message.chat.id, message_id=processing_msg.message_id)
 
-def process_multiple_urls(message, urls):
+def process_multiple_urls(chat_id, urls, user_id=None):
     """处理多个URL - 使用并发处理"""
-    user_id = message.from_user.id
+    if user_id is None:
+        # 如果是从消息对象调用的（单链接处理）
+        if hasattr(chat_id, 'from_user'):
+            user_id = chat_id.from_user.id
+            message = chat_id
+            chat_id = message.chat.id
+        else:
+            logger.error("无法确定用户ID")
+            return
+    else:
+        # 如果是从回调调用的（多链接处理）
+        message = None
 
     # 在同步环境中运行异步任务
     try:
-        run_async(process_multiple_urls_async(message, urls, user_id))
+        run_async(process_multiple_urls_async(chat_id, urls, user_id, message))
     except Exception as e:
         logger.error(f"批量处理任务失败: {e}", exc_info=True)
         # 发送错误消息给用户
         try:
             bot.send_message(
-                message.chat.id,
-                "❌ 批量处理过程中发生错误，请稍后重试",
-                reply_to_message_id=message.message_id
+                chat_id,
+                "❌ 批量处理过程中发生错误，请稍后重试"
             )
         except Exception:
             pass
 
-async def process_multiple_urls_async(message, urls, user_id):
+async def process_multiple_urls_async(chat_id, urls, user_id, original_message=None):
     """异步批量处理多个URL"""
     total = len(urls)
     user_preferences = user_manager.get_user_preferences(user_id)
@@ -490,11 +502,19 @@ async def process_multiple_urls_async(message, urls, user_id):
 
     # 创建进度消息
     try:
-        progress_msg = bot.send_message(
-            message.chat.id,
-            f"🚀 开始批量处理 {total} 个链接...\n📊 进度: 0/{total} (0%)\n⚡ 并发数: {max_concurrent}",
-            reply_to_message_id=message.message_id
-        )
+        progress_text = f"🚀 开始批量处理 {total} 个链接...\n📊 进度: 0/{total} (0%)\n⚡ 并发数: {max_concurrent}"
+
+        if original_message:
+            # 单链接处理，回复原消息
+            progress_msg = bot.send_message(
+                chat_id,
+                progress_text,
+                reply_to_message_id=original_message.message_id
+            )
+        else:
+            # 多链接处理，不回复特定消息
+            progress_msg = bot.send_message(chat_id, progress_text)
+
     except Exception as e:
         logger.error(f"发送进度消息失败: {e}")
         return
@@ -510,7 +530,7 @@ async def process_multiple_urls_async(message, urls, user_id):
         async with semaphore:
             try:
                 success = await wait_for(
-                    extract_and_send_media_async(url, message, user_preferences),
+                    extract_and_send_media_async(url, chat_id, user_preferences, original_message),
                     timeout=timeout
                 )
 
@@ -529,7 +549,7 @@ async def process_multiple_urls_async(message, urls, user_id):
                 try:
                     bot.edit_message_text(
                         f"🚀 批量处理进行中...\n{progress_text}",
-                        chat_id=message.chat.id,
+                        chat_id=chat_id,
                         message_id=progress_msg.message_id
                     )
                 except Exception:
@@ -565,7 +585,7 @@ async def process_multiple_urls_async(message, urls, user_id):
 
         bot.edit_message_text(
             final_text,
-            chat_id=message.chat.id,
+            chat_id=chat_id,
             message_id=progress_msg.message_id
         )
 
@@ -573,7 +593,7 @@ async def process_multiple_urls_async(message, urls, user_id):
         logger.error(f"批量处理过程中发生错误: {e}")
         bot.edit_message_text(
             f"❌ 批量处理中断\n已完成: {completed}/{total}",
-            chat_id=message.chat.id,
+            chat_id=chat_id,
             message_id=progress_msg.message_id
         )
 
@@ -581,11 +601,12 @@ def extract_and_send_media(url, original_message, processing_msg):
     """提取并发送媒体文件 - 同步版本"""
     user_id = original_message.from_user.id
     user_preferences = user_manager.get_user_preferences(user_id)
+    chat_id = original_message.chat.id
 
     # 运行异步版本
-    return run_async(extract_and_send_media_async(url, original_message, user_preferences))
+    return run_async(extract_and_send_media_async(url, chat_id, user_preferences, original_message))
 
-async def extract_and_send_media_async(url, original_message, user_preferences=None):
+async def extract_and_send_media_async(url, chat_id, user_preferences=None, original_message=None):
     """异步提取并发送媒体文件"""
     try:
         logger.info(f"开始处理URL: {url}")
@@ -655,16 +676,22 @@ async def extract_and_send_media_async(url, original_message, user_preferences=N
 
                             # 如果需要分片，添加分片信息
                             if total_chunks > 1:
-                                caption_parts.append(f"📦 分片: [{current_chunk}/{total_chunks}]")
+                                caption_parts.append(f"🎁 包裹: [{current_chunk}/{total_chunks}]")
 
                             chunk[0].caption = "\n\n".join(caption_parts)
 
-                        bot.send_media_group(
-                            chat_id=original_message.chat.id,
-                            media=chunk,
-                            reply_to_message_id=original_message.message_id,
-                            timeout=180
-                        )
+                        # 发送媒体组
+                        send_kwargs = {
+                            'chat_id': chat_id,
+                            'media': chunk,
+                            'timeout': 180
+                        }
+
+                        # 如果有原始消息，则回复该消息
+                        if original_message:
+                            send_kwargs['reply_to_message_id'] = original_message.message_id
+
+                        bot.send_media_group(**send_kwargs)
 
                     except Exception as e:
                         logger.error(f"发送媒体组失败: {e}")
@@ -682,22 +709,23 @@ async def extract_and_send_media_async(url, original_message, user_preferences=N
                                         caption_parts.append(f"🎁 包裹: [{current_chunk}/{total_chunks}]")
                                     caption = "\n\n".join(caption_parts)
 
+                                # 准备发送参数
+                                send_kwargs = {
+                                    'chat_id': chat_id,
+                                    'caption': caption,
+                                    'timeout': 120
+                                }
+
+                                # 如果有原始消息，则回复该消息
+                                if original_message:
+                                    send_kwargs['reply_to_message_id'] = original_message.message_id
+
                                 if isinstance(media_item, InputMediaVideo):
-                                    bot.send_video(
-                                        chat_id=original_message.chat.id,
-                                        video=media_item.media,
-                                        caption=caption,
-                                        reply_to_message_id=original_message.message_id,
-                                        timeout=120
-                                    )
+                                    send_kwargs['video'] = media_item.media
+                                    bot.send_video(**send_kwargs)
                                 else:
-                                    bot.send_photo(
-                                        chat_id=original_message.chat.id,
-                                        photo=media_item.media,
-                                        caption=caption,
-                                        reply_to_message_id=original_message.message_id,
-                                        timeout=120
-                                    )
+                                    send_kwargs['photo'] = media_item.media
+                                    bot.send_photo(**send_kwargs)
                             except Exception as single_error:
                                 logger.error(f"单独发送媒体失败: {single_error}")
 
