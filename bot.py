@@ -430,9 +430,9 @@ async def handle_media_send_failure(chat_id, failed_chunks, successful_chunks, t
     is_media_error = any("WEBPAGE_MEDIA_EMPTY" in reason or "wrong type" in reason for reason in failure_reasons)
 
     if is_media_error:
-        failure_msg = "🚫 部分媒体内容无法访问（可能已被删除或链接失效）"
+        failure_msg = "🚫 呜呜~ 部分媒体内容小猫咪抓不到了（可能已被删除或链接失效了喵）"
     else:
-        failure_msg = "⚠️ 部分媒体发送失败"
+        failure_msg = "⚠️ 呜呜~ 部分媒体发送失败了喵"
 
     # 构建状态消息
     status_parts = [
@@ -442,7 +442,7 @@ async def handle_media_send_failure(chat_id, failed_chunks, successful_chunks, t
     ]
 
     if successful_chunks > 0:
-        status_parts.append("✅ 已成功发送的内容保持不变")
+        status_parts.append("✅ 已成功发送的内容会保持不变的喵~")
 
     status_text = "\n".join(status_parts)
 
@@ -467,11 +467,11 @@ async def handle_media_send_failure(chat_id, failed_chunks, successful_chunks, t
     user_manager.retry_data[callback_prefix] = retry_data
 
     markup.row(
-        InlineKeyboardButton("🔄 重试失败的媒体", callback_data=f"{callback_prefix}_retry"),
-        InlineKeyboardButton("✅ 发送可用媒体", callback_data=f"{callback_prefix}_partial")
+        InlineKeyboardButton("🔄 重试失败的媒体喵", callback_data=f"{callback_prefix}_retry"),
+        InlineKeyboardButton("✅ 发送可用媒体喵", callback_data=f"{callback_prefix}_partial")
     )
     markup.row(
-        InlineKeyboardButton("❌ 取消", callback_data=f"{callback_prefix}_cancel")
+        InlineKeyboardButton("❌ 算了喵", callback_data=f"{callback_prefix}_cancel")
     )
 
     # 发送选项消息
@@ -479,14 +479,14 @@ async def handle_media_send_failure(chat_id, failed_chunks, successful_chunks, t
         if original_message:
             bot.send_message(
                 chat_id,
-                status_text + "\n\n请选择处理方式：",
+                status_text + "\n\n主人想要怎么处理呢？🐱",
                 reply_markup=markup,
                 reply_to_message_id=original_message.message_id
             )
         else:
             bot.send_message(
                 chat_id,
-                status_text + "\n\n请选择处理方式：",
+                status_text + "\n\n主人想要怎么处理呢？🐱",
                 reply_markup=markup
             )
     except Exception as e:
@@ -515,7 +515,7 @@ async def send_available_media_only(chat_id, original_media_group, failed_chunks
     try:
         # 为第一个媒体添加说明
         if available_media and work_info:
-            caption_parts = [work_info, f"📋 已过滤无效媒体，共 {len(available_media)} 个可用文件"]
+            caption_parts = [work_info, f"📋 小猫咪已过滤无效媒体，共 {len(available_media)} 个可用文件喵~ ✨"]
             available_media[0].caption = "\n\n".join(caption_parts)
 
         # 分片发送
@@ -545,20 +545,20 @@ async def send_available_media_only(chat_id, original_media_group, failed_chunks
 def send_welcome(message):
     """处理 /start 和 /help 命令"""
     welcome_text = """
-🐱 喵~ 欢迎使用小红书内容下载机器人喵！
+🐱✨ 喵呜~ 欢迎来到小红书下载助手的世界喵！
 
-主人只需要发送小红书链接给我，我就会帮你下载里面的图片和视频哦~
-快来试试吧，喵呜~ ✨
+主人只要把小红书链接发给我，我就会像小猫咪一样敏捷地帮你抓取里面的图片和视频哦~
+快来试试吧，我已经迫不及待想为主人服务了呢，喵呜~ ✨
 
-💡 使用提示：
-• 直接发送小红书链接即可
-• 支持批量处理多个链接
-• 图片视频都能下载的喵~
+💡 使用小贴士喵：
+• 直接发送小红书链接就可以啦~
+• 支持一次处理多个链接呢，很厉害吧喵！
+• 图片视频统统都能下载，我可是全能小猫咪喵~
 
-🔧 设置命令：
-• /settings - 查看当前设置
+🔧 设置命令喵：
+• /settings - 查看当前设置喵
 • /set_format <格式> - 设置图片格式 (WEBP/PNG/JPEG)
-• /cancel - 取消当前所有任务
+• /cancel - 取消当前所有任务喵
 """
     bot.reply_to(message, welcome_text)
 
@@ -569,14 +569,15 @@ def show_settings(message):
     preferences = user_manager.get_user_preferences(user_id)
 
     settings_text = f"""
-🔧 当前设置：
+🔧✨ 主人的当前设置喵：
 
-📸 图片格式: {preferences.get('image_format', 'WEBP')}
-⚡ 最大并发: {preferences.get('max_concurrent', 3)}
+📸 图片格式: {preferences.get('image_format', 'WEBP')} 喵
+⚡ 最大并发: {preferences.get('max_concurrent', 3)} 个任务
 ⏱️ 超时时间: {preferences.get('timeout', 60)}秒
 
-使用 /set_format <格式> 来修改图片格式
+使用 /set_format <格式> 来修改图片格式喵~
 支持的格式: WEBP, PNG, JPEG, HEIC, AVIF
+我会按照主人的喜好来处理图片的喵！✨
 """
     bot.reply_to(message, settings_text)
 
@@ -587,25 +588,25 @@ def set_image_format(message):
     args = message.text.split()[1:] if len(message.text.split()) > 1 else []
 
     if not args:
-        bot.reply_to(message, "请指定图片格式，例如: /set_format WEBP\n支持的格式: WEBP, PNG, JPEG, HEIC, AVIF")
+        bot.reply_to(message, "喵~ 主人需要指定图片格式哦，例如: /set_format WEBP\n支持的格式: WEBP, PNG, JPEG, HEIC, AVIF 喵！")
         return
 
     format_name = args[0].upper()
     valid_formats = ["WEBP", "PNG", "JPEG", "HEIC", "AVIF", "AUTO"]
 
     if format_name not in valid_formats:
-        bot.reply_to(message, f"不支持的格式: {format_name}\n支持的格式: {', '.join(valid_formats)}")
+        bot.reply_to(message, f"喵？{format_name} 这个格式我还不会呢~\n支持的格式: {', '.join(valid_formats)} 喵！")
         return
 
     user_manager.set_user_preference(user_id, "image_format", format_name)
-    bot.reply_to(message, f"✅ 图片格式已设置为: {format_name}")
+    bot.reply_to(message, f"✅ 好的喵~ 图片格式已经设置为 {format_name} 啦！我会按照主人的喜好来处理图片的喵~ ✨")
 
 @bot.message_handler(commands=['cancel'])
 def cancel_tasks(message):
     """取消用户所有任务"""
     user_id = message.from_user.id
     user_manager.cancel_user_tasks(user_id)
-    bot.reply_to(message, "✅ 已清除所有待处理任务")
+    bot.reply_to(message, "✅ 好的喵~ 已经帮主人清除所有待处理任务啦！现在可以重新开始了呢~ 🐾")
 
 
 @bot.message_handler(func=lambda message: True)
@@ -630,12 +631,12 @@ def handle_message(message):
     user_manager.add_pending_urls(user_id, extracted_urls)
 
     urls_text = "\n".join([f"{i+1}. {url}" for i, url in enumerate(extracted_urls)])
-    confirm_text = f"喵~ 我发现了 {len(extracted_urls)} 个链接呢：\n\n{urls_text}\n\n要帮主人处理这些链接吗？🐱✨"
+    confirm_text = f"喵呜~ 我的小爪子发现了 {len(extracted_urls)} 个链接呢：\n\n{urls_text}\n\n要让我帮主人把这些都抓取下来吗？我已经准备好了哦~ 🐱✨"
 
     markup = InlineKeyboardMarkup()
     markup.row(
-        InlineKeyboardButton("✅ 好的喵~", callback_data=f"confirm_{user_id}"),
-        InlineKeyboardButton("❌ 不用了", callback_data=f"cancel_{user_id}")
+        InlineKeyboardButton("✅ 好的喵~ 开始吧！", callback_data=f"confirm_{user_id}"),
+        InlineKeyboardButton("❌ 不用了喵", callback_data=f"cancel_{user_id}")
     )
 
     bot.reply_to(message, confirm_text, reply_markup=markup)
@@ -649,7 +650,7 @@ def handle_retry_options(call):
 
     # 获取重试数据
     if not hasattr(user_manager, 'retry_data') or callback_prefix not in user_manager.retry_data:
-        bot.answer_callback_query(call.id, "❌ 重试数据已过期，请重新发送链接")
+        bot.answer_callback_query(call.id, "❌ 喵？重试数据已过期了，请重新发送链接给我吧~")
         bot.delete_message(call.message.chat.id, call.message.message_id)
         return
 
@@ -658,7 +659,7 @@ def handle_retry_options(call):
 
     # 验证用户权限
     if call.message.chat.id != chat_id:
-        bot.answer_callback_query(call.id, "❌ 无权限操作")
+        bot.answer_callback_query(call.id, "❌ 喵？这不是主人的操作呢~ 我只听主人的话哦~")
         return
 
     try:
@@ -666,7 +667,7 @@ def handle_retry_options(call):
             # 取消操作
             try:
                 bot.edit_message_text(
-                    "❌ 已取消媒体发送",
+                    "❌ 好的喵~ 已取消媒体发送，有需要随时叫我哦~ 🐾",
                     chat_id=call.message.chat.id,
                     message_id=call.message.message_id
                 )
@@ -676,13 +677,13 @@ def handle_retry_options(call):
                     bot.delete_message(call.message.chat.id, call.message.message_id)
                 except Exception:
                     pass
-            bot.answer_callback_query(call.id, "已取消")
+            bot.answer_callback_query(call.id, "已取消喵~")
 
         elif action == "retry":
             # 重试失败的媒体
             try:
                 bot.edit_message_text(
-                    "🔄 正在重试发送失败的媒体...",
+                    "🔄 好的喵~ 小猫咪正在重试发送失败的媒体... 这次一定要成功喵！✨",
                     chat_id=call.message.chat.id,
                     message_id=call.message.message_id
                 )
@@ -692,7 +693,7 @@ def handle_retry_options(call):
                     bot.delete_message(call.message.chat.id, call.message.message_id)
                 except Exception:
                     pass
-            bot.answer_callback_query(call.id, "开始重试")
+            bot.answer_callback_query(call.id, "开始重试喵~")
 
             # 异步重试
             run_async(retry_failed_media(retry_data, call.message.chat.id))
@@ -701,7 +702,7 @@ def handle_retry_options(call):
             # 发送可用媒体
             try:
                 bot.edit_message_text(
-                    "✅ 正在发送可用的媒体内容...",
+                    "✅ 好的喵~ 小猫咪正在发送可用的媒体内容... 马上就好~ ✨",
                     chat_id=call.message.chat.id,
                     message_id=call.message.message_id
                 )
@@ -713,14 +714,14 @@ def handle_retry_options(call):
                 except Exception:
                     pass
 
-            bot.answer_callback_query(call.id, "发送可用媒体")
+            bot.answer_callback_query(call.id, "发送可用媒体喵~")
 
             # 异步发送可用媒体
             run_async(send_partial_media(retry_data, call.message.chat.id))
 
     except Exception as e:
         logger.error(f"处理重试选项失败: {e}")
-        bot.answer_callback_query(call.id, "❌ 操作失败")
+        bot.answer_callback_query(call.id, "❌ 呜呜~ 操作失败了喵... 😿")
     finally:
         # 清理重试数据
         if hasattr(user_manager, 'retry_data') and callback_prefix in user_manager.retry_data:
@@ -755,11 +756,11 @@ async def retry_failed_media(retry_data, chat_id):
 
     # 发送结果
     if success_count == total_failed:
-        result_msg = f"✅ 重试成功！所有 {total_failed} 个分片都已发送"
+        result_msg = f"✅ 喵呜~ 重试成功啦！所有 {total_failed} 个分片都已发送给主人了~ 小猫咪很棒吧！✨"
     elif success_count > 0:
-        result_msg = f"⚠️ 部分重试成功：{success_count}/{total_failed} 个分片发送成功"
+        result_msg = f"⚠️ 部分重试成功喵：{success_count}/{total_failed} 个分片发送成功~ 小猫咪已经很努力了呢~ 🐾"
     else:
-        result_msg = f"❌ 重试失败，所有 {total_failed} 个分片仍然无法发送"
+        result_msg = f"❌ 呜呜~ 重试失败了，所有 {total_failed} 个分片仍然无法发送... 对不起喵~ 😿"
 
     bot.send_message(chat_id, result_msg)
 
@@ -785,7 +786,7 @@ async def send_partial_media(retry_data, chat_id):
             )
 
             if not results or len(results) == 0:
-                bot.send_message(chat_id, "❌ 无法重新获取媒体数据")
+                bot.send_message(chat_id, "❌ 呜呜~ 小猫咪无法重新获取媒体数据... 😿")
                 return
 
             data = results[0]
@@ -797,7 +798,7 @@ async def send_partial_media(retry_data, chat_id):
             media_type = data.get('作品类型', '未知')
 
             if not download_urls:
-                bot.send_message(chat_id, "❌ 没有可用的媒体链接")
+                bot.send_message(chat_id, "❌ 呜呜~ 没有可用的媒体链接了喵... 😿")
                 return
 
             # 创建新的媒体组，但要测试每个链接
@@ -824,8 +825,8 @@ async def send_partial_media(retry_data, chat_id):
             if not available_media:
                 bot.send_message(
                     chat_id,
-                    "❌ 没有可用的媒体内容\n"
-                    "💡 所有媒体都无法访问，请检查链接是否有效"
+                    "❌ 呜呜~ 没有可用的媒体内容了喵...\n"
+                    "💡 所有媒体都无法访问，请主人检查链接是否有效呢~ 😿"
                 )
                 return
 
@@ -833,8 +834,8 @@ async def send_partial_media(retry_data, chat_id):
             if available_media and work_info:
                 caption_parts = [
                     work_info,
-                    f"📋 已过滤 {len(failed_indices)} 个无效媒体",
-                    f"✅ 共 {len(available_media)} 个可用文件"
+                    f"📋 小猫咪已过滤 {len(failed_indices)} 个无效媒体",
+                    f"✅ 共 {len(available_media)} 个可用文件喵~ ✨"
                 ]
                 available_media[0].caption = "\n\n".join(caption_parts)
 
@@ -856,16 +857,16 @@ async def send_partial_media(retry_data, chat_id):
             # 发送完成消息
             bot.send_message(
                 chat_id,
-                f"✅ 已发送 {len(available_media)} 个可用媒体文件\n"
-                f"🚫 跳过了 {len(failed_indices)} 个无法访问的文件"
+                f"✅ 喵呜~ 已发送 {len(available_media)} 个可用媒体文件给主人啦！\n"
+                f"🚫 跳过了 {len(failed_indices)} 个无法访问的文件喵~"
             )
 
     except Exception as e:
         logger.error(f"发送部分媒体失败: {e}")
         bot.send_message(
             chat_id,
-            "❌ 发送可用媒体时出现错误\n"
-            "💡 请稍后重试或重新发送链接"
+            "❌ 呜呜~ 发送可用媒体时出现错误了喵...\n"
+            "💡 请主人稍后重试或重新发送链接给我吧~ 😿"
         )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('confirm_', 'cancel_')))
@@ -876,41 +877,41 @@ def handle_confirmation(call):
     
     # 验证用户身份
     if str(user_id) != callback_user_id:
-        bot.answer_callback_query(call.id, "喵？这不是你的操作呢~")
+        bot.answer_callback_query(call.id, "喵？这不是主人的操作呢~ 我只听主人的话哦~ 🐾")
         return
-    
+
     if action == "cancel":
         user_manager.remove_pending_urls(user_id)
         bot.delete_message(call.message.chat.id, call.message.message_id)
-        bot.answer_callback_query(call.id, "好的喵~ 已取消")
+        bot.answer_callback_query(call.id, "好的喵~ 那我就不处理啦~ 有需要随时叫我哦~ ✨")
         return
 
     # 确认处理
     urls = user_manager.get_pending_urls(user_id)
     if not urls:
-        bot.answer_callback_query(call.id, "喵？链接好像过期了，请重新发送吧~")
+        bot.answer_callback_query(call.id, "喵？链接好像跑掉了呢，请重新发送给我吧~ 🐱")
         return
 
     user_manager.remove_pending_urls(user_id)
 
     # 编辑确认消息为开始处理状态
     bot.edit_message_text(
-        "🚀 收到喵~ 开始处理链接...",
+        "🚀 收到喵~ 小猫咪开始努力工作啦！请稍等一下下~ ✨",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id
     )
-    bot.answer_callback_query(call.id, "开始处理")
+    bot.answer_callback_query(call.id, "开始处理喵~")
 
     # 处理所有URL，传递聊天信息而不是消息对象
     process_multiple_urls(call.message.chat.id, urls, user_id)
 
 def process_single_url(message, url):
     """处理单个URL"""
-    processing_msg = bot.reply_to(message, "喵~ 正在努力解析链接中，请稍等一下下...")
+    processing_msg = bot.reply_to(message, "喵~ 小猫咪正在努力解析链接中，请主人稍等一下下... 🐾")
     # 删除处理消息
     bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
     # 发送新的发送消息
-    sending_msg = bot.send_message(message.chat.id, "喵呜~ 正在发送给主人，马上就好...",
+    sending_msg = bot.send_message(message.chat.id, "喵呜~ 解析完成！正在用小爪子把内容送给主人，马上就好... ✨",
                                    reply_to_message_id=message.message_id)
 
     try:
@@ -921,7 +922,7 @@ def process_single_url(message, url):
             bot.delete_message(chat_id=message.chat.id, message_id=sending_msg.message_id)
     except Exception as e:
         logger.error(f"处理单个URL时发生错误: {e}", exc_info=True)
-        bot.edit_message_text("呜呜~ 处理过程中出现了问题，请稍后重试吧...",
+        bot.edit_message_text("呜呜~ 小猫咪在处理过程中遇到了困难，请主人稍后重试吧... 对不起喵~ 😿",
                             chat_id=message.chat.id, message_id=processing_msg.message_id)
 
 def process_multiple_urls(chat_id, urls, user_id=None):
@@ -948,7 +949,7 @@ def process_multiple_urls(chat_id, urls, user_id=None):
         try:
             bot.send_message(
                 chat_id,
-                "❌ 批量处理过程中发生错误，请稍后重试"
+                "❌ 呜呜~ 批量处理过程中小猫咪遇到了困难，请主人稍后重试吧~ 😿"
             )
         except Exception:
             pass
@@ -962,7 +963,7 @@ async def process_multiple_urls_async(chat_id, urls, user_id, original_message=N
 
     # 创建进度消息
     try:
-        progress_text = f"🚀 开始批量处理 {total} 个链接...\n📊 进度: 0/{total} (0%)\n⚡ 并发数: {max_concurrent}"
+        progress_text = f"🚀 喵呜~ 小猫咪开始批量处理 {total} 个链接啦！\n📊 进度: 0/{total} (0%)\n⚡ 并发数: {max_concurrent} 个小爪子同时工作~ ✨"
 
         if original_message:
             # 单链接处理，回复原消息
@@ -1008,7 +1009,7 @@ async def process_multiple_urls_async(chat_id, urls, user_id, original_message=N
 
                 try:
                     bot.edit_message_text(
-                        f"🚀 批量处理进行中...\n{progress_text}",
+                        f"🚀 小猫咪正在努力工作中喵...\n{progress_text}",
                         chat_id=chat_id,
                         message_id=progress_msg.message_id
                     )
@@ -1037,10 +1038,10 @@ async def process_multiple_urls_async(chat_id, urls, user_id, original_message=N
 
         # 最终结果
         final_text = (
-            f"🎉 批量处理完成！\n"
+            f"🎉 喵呜~ 小猫咪的任务完成啦！\n"
             f"📊 总计: {total} 个链接\n"
-            f"✅ 成功: {completed} 个\n"
-            f"❌ 失败: {failed} 个"
+            f"✅ 成功: {completed} 个 (小猫咪很棒吧~ ✨)\n"
+            f"❌ 失败: {failed} 个 {('(呜呜~ 对不起喵)' if failed > 0 else '')}"
         )
 
         bot.edit_message_text(
@@ -1052,7 +1053,7 @@ async def process_multiple_urls_async(chat_id, urls, user_id, original_message=N
     except Exception as e:
         logger.error(f"批量处理过程中发生错误: {e}")
         bot.edit_message_text(
-            f"❌ 批量处理中断\n已完成: {completed}/{total}",
+            f"❌ 呜呜~ 批量处理被中断了\n已完成: {completed}/{total}\n小猫咪会继续努力的喵~ 😿",
             chat_id=chat_id,
             message_id=progress_msg.message_id
         )
@@ -1135,38 +1136,38 @@ async def extract_and_send_media_async(url, chat_id, user_preferences=None, orig
 
 # --- 主程序入口 ---
 if __name__ == '__main__':
-    logger.info("🚀 小红书下载机器人启动中...")
-    logger.info("📡 开始监听消息...")
+    logger.info("🚀 喵呜~ 小红书下载机器人启动中...")
+    logger.info("📡 小猫咪开始监听消息啦~ ✨")
 
     try:
         bot.polling(none_stop=True)
     except KeyboardInterrupt:
-        logger.info("🛑 收到停止信号，正在关闭...")
+        logger.info("🛑 收到停止信号，小猫咪准备休息啦...")
     except Exception as e:
-        logger.error(f"❌ Bot运行时发生错误: {e}", exc_info=True)
+        logger.error(f"❌ 呜呜~ Bot运行时发生错误: {e}", exc_info=True)
     finally:
-        logger.info("🧹 开始清理资源...")
+        logger.info("🧹 小猫咪开始整理玩具...")
 
         # 清理所有用户数据
         try:
             for user_id in list(user_manager.active_tasks.keys()):
                 user_manager.cancel_user_tasks(user_id)
-            logger.info("✅ 用户数据已清理")
+            logger.info("✅ 用户数据已整理好啦")
         except Exception as e:
-            logger.error(f"❌ 清理用户数据时出错: {e}")
+            logger.error(f"❌ 整理用户数据时出错: {e}")
 
         # 清理XHS实例池
         try:
             run_async(xhs_pool.cleanup())
-            logger.info("✅ XHS实例池已清理")
+            logger.info("✅ XHS实例池已清理干净")
         except Exception as e:
             logger.error(f"❌ 清理XHS实例池时出错: {e}")
 
         # 保存用户设置
         try:
             user_manager._save_user_settings()
-            logger.info("✅ 用户设置已保存")
+            logger.info("✅ 用户设置已保存好")
         except Exception as e:
             logger.error(f"❌ 保存用户设置时出错: {e}")
 
-        logger.info("🎉 Bot已安全停止")
+        logger.info("🎉 小猫咪已安全休息，晚安喵~ ✨")
