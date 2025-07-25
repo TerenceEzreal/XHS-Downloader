@@ -2,14 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-LABEL name="XHS-Downloader" authors="JoeanAmier" repository="https://github.com/JoeanAmier/XHS-Downloader"
+LABEL name="OOTD Bot" authors="Darlene Jiang" repository="https://github.com/TerenceEzreal/XHS-Downloader"
 
 COPY requirements.txt /app/requirements.txt
-RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir pyTelegramBotAPI
 RUN pip install --no-cache-dir -r /app/requirements.txt
-
-COPY pyTelegramBotAPI /app/pyTelegramBotAPI
-RUN pip install /app/pyTelegramBotAPI
 
 COPY locale /app/locale
 COPY source /app/source
@@ -22,4 +19,4 @@ COPY config.ini /app/config.ini
 
 EXPOSE 5556
 
-CMD ["python", "main.py"]
+CMD ["python", "bot.py"]
