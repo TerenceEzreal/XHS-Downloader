@@ -16,6 +16,8 @@ lxml==5.3.2
     # via xhs-downloader (pyproject.toml)
 pyperclip==1.9.0
     # via xhs-downloader (pyproject.toml)
+pytelegrambotapi==4.27.0
+    # via xhs-downloader (pyproject.toml)
 pyyaml==6.0.2
     # via xhs-downloader (pyproject.toml)
 rookiepy==0.5.6
