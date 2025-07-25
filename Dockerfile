@@ -5,7 +5,8 @@ WORKDIR /app
 LABEL name="OOTD Bot" authors="Darlene Jiang" repository="https://github.com/TerenceEzreal/XHS-Downloader"
 
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --progress-bar off -r /app/requirements.txt
+RUN pip config --user set global.progress_bar off
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY locale /app/locale
 COPY source /app/source
