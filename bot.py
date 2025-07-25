@@ -307,6 +307,238 @@ class UserDataManager:
 # 全局用户数据管理器
 user_manager = UserDataManager()
 
+# === 媒体发送重试机制 ===
+async def validate_media_url(url, timeout=10):
+    """验证媒体URL是否可访问"""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.head(url)
+            return response.status_code == 200
+    except Exception:
+        return False
+
+async def filter_valid_media(media_group, max_concurrent=3):
+    """过滤出有效的媒体"""
+    import asyncio
+
+    async def check_media(media_item):
+        """检查单个媒体项"""
+        try:
+            url = media_item.media
+            is_valid = await validate_media_url(url)
+            return (media_item, is_valid)
+        except Exception:
+            return (media_item, False)
+
+    # 并发检查媒体有效性
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def check_with_semaphore(media_item):
+        async with semaphore:
+            return await check_media(media_item)
+
+    # 执行并发检查
+    results = await asyncio.gather(
+        *[check_with_semaphore(media) for media in media_group],
+        return_exceptions=True
+    )
+
+    # 分离有效和无效的媒体
+    valid_media = []
+    invalid_media = []
+
+    for i, result in enumerate(results):
+        if isinstance(result, tuple):
+            media_item, is_valid = result
+            if is_valid:
+                valid_media.append(media_item)
+            else:
+                invalid_media.append((i, media_item))
+        else:
+            # 检查过程中出现异常，标记为无效
+            invalid_media.append((i, media_group[i]))
+
+    return valid_media, invalid_media
+
+async def send_media_with_retry_option(chat_id, media_group, work_info, original_message, original_url):
+    """发送媒体组，失败时提供重试选项"""
+
+    # 首先预验证媒体（可选，用于快速检测）
+    logger.info(f"开始发送 {len(media_group)} 个媒体文件")
+
+    total_chunks = (len(media_group) + 9) // 10
+    failed_chunks = []
+    successful_chunks = 0
+
+    for i in range(0, len(media_group), 10):
+        chunk = media_group[i:i + 10]
+        current_chunk = (i // 10) + 1
+
+        try:
+            # 为第一个媒体项目添加caption
+            if chunk:
+                caption_parts = []
+
+                # 添加作品信息
+                if work_info:
+                    caption_parts.append(work_info)
+
+                # 如果需要分片，添加分片信息
+                if total_chunks > 1:
+                    caption_parts.append(f"📦 分片: [{current_chunk}/{total_chunks}]")
+
+                chunk[0].caption = "\n\n".join(caption_parts)
+
+            # 发送媒体组
+            send_kwargs = {
+                'chat_id': chat_id,
+                'media': chunk,
+                'timeout': 180
+            }
+
+            # 如果有原始消息，则回复该消息
+            if original_message:
+                send_kwargs['reply_to_message_id'] = original_message.message_id
+
+            bot.send_media_group(**send_kwargs)
+            successful_chunks += 1
+            logger.info(f"成功发送分片 {current_chunk}/{total_chunks}")
+
+        except Exception as e:
+            logger.error(f"发送媒体组分片 {current_chunk} 失败: {e}")
+            failed_chunks.append((chunk, current_chunk, str(e)))
+
+    # 如果有失败的分片，提供选项
+    if failed_chunks:
+        logger.warning(f"有 {len(failed_chunks)} 个分片发送失败，提供重试选项")
+        await handle_media_send_failure(
+            chat_id, failed_chunks, successful_chunks, total_chunks,
+            work_info, original_message, original_url, media_group
+        )
+        return False
+
+    logger.info(f"所有 {total_chunks} 个分片发送成功")
+    return True
+
+async def handle_media_send_failure(chat_id, failed_chunks, successful_chunks, total_chunks,
+                                   work_info, original_message, original_url, original_media_group):
+    """处理媒体发送失败，提供用户选项"""
+
+    # 分析失败原因
+    failure_reasons = [chunk[2] for chunk in failed_chunks]
+    is_media_error = any("WEBPAGE_MEDIA_EMPTY" in reason or "wrong type" in reason for reason in failure_reasons)
+
+    if is_media_error:
+        failure_msg = "🚫 部分媒体内容无法访问（可能已被删除或链接失效）"
+    else:
+        failure_msg = "⚠️ 部分媒体发送失败"
+
+    # 构建状态消息
+    status_parts = [
+        failure_msg,
+        f"📊 状态: {successful_chunks}/{total_chunks} 个分片发送成功",
+        f"❌ 失败: {len(failed_chunks)} 个分片"
+    ]
+
+    if successful_chunks > 0:
+        status_parts.append("✅ 已成功发送的内容保持不变")
+
+    status_text = "\n".join(status_parts)
+
+    # 创建重试选项按钮
+    markup = InlineKeyboardMarkup()
+
+    # 生成唯一的回调数据
+    callback_prefix = f"retry_{hash(original_url) % 10000}"
+
+    # 存储重试数据
+    retry_data = {
+        'failed_chunks': failed_chunks,
+        'work_info': work_info,
+        'original_message': original_message,
+        'original_url': original_url,
+        'chat_id': chat_id
+    }
+
+    # 简单的内存存储（生产环境建议使用数据库）
+    if not hasattr(user_manager, 'retry_data'):
+        user_manager.retry_data = {}
+    user_manager.retry_data[callback_prefix] = retry_data
+
+    markup.row(
+        InlineKeyboardButton("🔄 重试失败的媒体", callback_data=f"{callback_prefix}_retry"),
+        InlineKeyboardButton("✅ 发送可用媒体", callback_data=f"{callback_prefix}_partial")
+    )
+    markup.row(
+        InlineKeyboardButton("❌ 取消", callback_data=f"{callback_prefix}_cancel")
+    )
+
+    # 发送选项消息
+    try:
+        if original_message:
+            bot.send_message(
+                chat_id,
+                status_text + "\n\n请选择处理方式：",
+                reply_markup=markup,
+                reply_to_message_id=original_message.message_id
+            )
+        else:
+            bot.send_message(
+                chat_id,
+                status_text + "\n\n请选择处理方式：",
+                reply_markup=markup
+            )
+    except Exception as e:
+        logger.error(f"发送重试选项失败: {e}")
+
+async def send_available_media_only(chat_id, original_media_group, failed_chunks, work_info, original_message):
+    """只发送可用的媒体，跳过失败的"""
+
+    # 获取失败的媒体索引
+    failed_media_indices = set()
+    for chunk, chunk_num, _ in failed_chunks:
+        start_idx = (chunk_num - 1) * 10
+        for i, media in enumerate(chunk):
+            failed_media_indices.add(start_idx + i)
+
+    # 创建只包含可用媒体的新组
+    available_media = []
+    for i, media in enumerate(original_media_group):
+        if i not in failed_media_indices:
+            available_media.append(media)
+
+    if not available_media:
+        return False
+
+    # 发送可用媒体
+    try:
+        # 为第一个媒体添加说明
+        if available_media and work_info:
+            caption_parts = [work_info, f"📋 已过滤无效媒体，共 {len(available_media)} 个可用文件"]
+            available_media[0].caption = "\n\n".join(caption_parts)
+
+        # 分片发送
+        for i in range(0, len(available_media), 10):
+            chunk = available_media[i:i + 10]
+
+            send_kwargs = {
+                'chat_id': chat_id,
+                'media': chunk,
+                'timeout': 180
+            }
+
+            if original_message:
+                send_kwargs['reply_to_message_id'] = original_message.message_id
+
+            bot.send_media_group(**send_kwargs)
+
+        return True
+
+    except Exception as e:
+        logger.error(f"发送可用媒体失败: {e}")
+        return False
+
 # --- Bot 消息处理器 ---
 
 @bot.message_handler(commands=['start', 'help'])
@@ -407,6 +639,234 @@ def handle_message(message):
     )
 
     bot.reply_to(message, confirm_text, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.endswith(('_retry', '_partial', '_cancel')))
+def handle_retry_options(call):
+    """处理媒体发送重试选项"""
+    callback_data = call.data
+    callback_prefix = callback_data.rsplit('_', 1)[0]
+    action = callback_data.rsplit('_', 1)[1]
+
+    # 获取重试数据
+    if not hasattr(user_manager, 'retry_data') or callback_prefix not in user_manager.retry_data:
+        bot.answer_callback_query(call.id, "❌ 重试数据已过期，请重新发送链接")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        return
+
+    retry_data = user_manager.retry_data[callback_prefix]
+    chat_id = retry_data['chat_id']
+
+    # 验证用户权限
+    if call.message.chat.id != chat_id:
+        bot.answer_callback_query(call.id, "❌ 无权限操作")
+        return
+
+    try:
+        if action == "cancel":
+            # 取消操作
+            try:
+                bot.edit_message_text(
+                    "❌ 已取消媒体发送",
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id
+                )
+            except Exception as edit_error:
+                logger.warning(f"编辑取消消息失败: {edit_error}")
+                try:
+                    bot.delete_message(call.message.chat.id, call.message.message_id)
+                except Exception:
+                    pass
+            bot.answer_callback_query(call.id, "已取消")
+
+        elif action == "retry":
+            # 重试失败的媒体
+            try:
+                bot.edit_message_text(
+                    "🔄 正在重试发送失败的媒体...",
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id
+                )
+            except Exception as edit_error:
+                logger.warning(f"编辑重试消息失败: {edit_error}")
+                try:
+                    bot.delete_message(call.message.chat.id, call.message.message_id)
+                except Exception:
+                    pass
+            bot.answer_callback_query(call.id, "开始重试")
+
+            # 异步重试
+            run_async(retry_failed_media(retry_data, call.message.chat.id))
+
+        elif action == "partial":
+            # 发送可用媒体
+            try:
+                bot.edit_message_text(
+                    "✅ 正在发送可用的媒体内容...",
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id
+                )
+            except Exception as edit_error:
+                # 如果编辑失败（内容相同），直接删除消息
+                logger.warning(f"编辑消息失败: {edit_error}")
+                try:
+                    bot.delete_message(call.message.chat.id, call.message.message_id)
+                except Exception:
+                    pass
+
+            bot.answer_callback_query(call.id, "发送可用媒体")
+
+            # 异步发送可用媒体
+            run_async(send_partial_media(retry_data, call.message.chat.id))
+
+    except Exception as e:
+        logger.error(f"处理重试选项失败: {e}")
+        bot.answer_callback_query(call.id, "❌ 操作失败")
+    finally:
+        # 清理重试数据
+        if hasattr(user_manager, 'retry_data') and callback_prefix in user_manager.retry_data:
+            del user_manager.retry_data[callback_prefix]
+
+async def retry_failed_media(retry_data, chat_id):
+    """重试发送失败的媒体"""
+    failed_chunks = retry_data['failed_chunks']
+    work_info = retry_data['work_info']
+    original_message = retry_data['original_message']
+
+    success_count = 0
+    total_failed = len(failed_chunks)
+
+    for chunk, chunk_num, _ in failed_chunks:
+        try:
+            # 重新尝试发送
+            send_kwargs = {
+                'chat_id': chat_id,
+                'media': chunk,
+                'timeout': 180
+            }
+
+            if original_message:
+                send_kwargs['reply_to_message_id'] = original_message.message_id
+
+            bot.send_media_group(**send_kwargs)
+            success_count += 1
+
+        except Exception as e:
+            logger.error(f"重试发送分片 {chunk_num} 失败: {e}")
+
+    # 发送结果
+    if success_count == total_failed:
+        result_msg = f"✅ 重试成功！所有 {total_failed} 个分片都已发送"
+    elif success_count > 0:
+        result_msg = f"⚠️ 部分重试成功：{success_count}/{total_failed} 个分片发送成功"
+    else:
+        result_msg = f"❌ 重试失败，所有 {total_failed} 个分片仍然无法发送"
+
+    bot.send_message(chat_id, result_msg)
+
+async def send_partial_media(retry_data, chat_id):
+    """发送部分可用媒体"""
+    try:
+        # 重新解析原始URL获取媒体
+        original_url = retry_data['original_url']
+        work_info = retry_data['work_info']
+        original_message = retry_data['original_message']
+        failed_chunks = retry_data['failed_chunks']
+
+        # 重新获取媒体数据
+        user_preferences = user_manager.get_user_preferences(
+            original_message.from_user.id if original_message else None
+        )
+
+        async with get_xhs_instance(user_preferences) as xhs_instance:
+            results = await xhs_instance.extract(
+                original_url,
+                download=False,
+                data=True
+            )
+
+            if not results or len(results) == 0:
+                bot.send_message(chat_id, "❌ 无法重新获取媒体数据")
+                return
+
+            data = results[0]
+            download_urls = data['下载地址']
+            if isinstance(download_urls, str):
+                download_urls = download_urls.split()
+
+            download_urls = [url for url in download_urls if is_valid_url(url)]
+            media_type = data.get('作品类型', '未知')
+
+            if not download_urls:
+                bot.send_message(chat_id, "❌ 没有可用的媒体链接")
+                return
+
+            # 创建新的媒体组，但要测试每个链接
+            available_media = []
+            failed_indices = set()
+
+            # 获取失败的媒体索引（从失败的分片推算）
+            for chunk, chunk_num, _ in failed_chunks:
+                start_idx = (chunk_num - 1) * 10
+                for i in range(len(chunk)):
+                    failed_indices.add(start_idx + i)
+
+            # 只添加未失败的媒体
+            for index, dl_url in enumerate(download_urls):
+                if index not in failed_indices:
+                    try:
+                        if media_type in ['视频', 'video']:
+                            available_media.append(InputMediaVideo(media=dl_url))
+                        else:
+                            available_media.append(InputMediaPhoto(media=dl_url))
+                    except Exception as e:
+                        logger.error(f"创建媒体项失败: {dl_url}, 错误: {e}")
+
+            if not available_media:
+                bot.send_message(
+                    chat_id,
+                    "❌ 没有可用的媒体内容\n"
+                    "💡 所有媒体都无法访问，请检查链接是否有效"
+                )
+                return
+
+            # 为第一个媒体添加说明
+            if available_media and work_info:
+                caption_parts = [
+                    work_info,
+                    f"📋 已过滤 {len(failed_indices)} 个无效媒体",
+                    f"✅ 共 {len(available_media)} 个可用文件"
+                ]
+                available_media[0].caption = "\n\n".join(caption_parts)
+
+            # 分片发送可用媒体
+            for i in range(0, len(available_media), 10):
+                chunk = available_media[i:i + 10]
+
+                send_kwargs = {
+                    'chat_id': chat_id,
+                    'media': chunk,
+                    'timeout': 180
+                }
+
+                if original_message:
+                    send_kwargs['reply_to_message_id'] = original_message.message_id
+
+                bot.send_media_group(**send_kwargs)
+
+            # 发送完成消息
+            bot.send_message(
+                chat_id,
+                f"✅ 已发送 {len(available_media)} 个可用媒体文件\n"
+                f"🚫 跳过了 {len(failed_indices)} 个无法访问的文件"
+            )
+
+    except Exception as e:
+        logger.error(f"发送部分媒体失败: {e}")
+        bot.send_message(
+            chat_id,
+            "❌ 发送可用媒体时出现错误\n"
+            "💡 请稍后重试或重新发送链接"
+        )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('confirm_', 'cancel_')))
 def handle_confirmation(call):
@@ -657,77 +1117,14 @@ async def extract_and_send_media_async(url, chat_id, user_preferences=None, orig
                 except Exception as e:
                     logger.error(f"添加文件到媒体组失败: {dl_url}, 错误: {e}")
 
-            # 发送媒体组（分片处理）
+            # 发送媒体组（使用新的重试机制）
             if media_group:
-                total_chunks = (len(media_group) + 9) // 10  # 向上取整
-
-                for i in range(0, len(media_group), 10):
-                    chunk = media_group[i:i + 10]
-                    current_chunk = (i // 10) + 1
-
-                    try:
-                        # 为第一个媒体项目添加caption
-                        if chunk:
-                            caption_parts = []
-
-                            # 添加作品信息
-                            if work_info:
-                                caption_parts.append(work_info)
-
-                            # 如果需要分片，添加分片信息
-                            if total_chunks > 1:
-                                caption_parts.append(f"🎁 包裹: [{current_chunk}/{total_chunks}]")
-
-                            chunk[0].caption = "\n\n".join(caption_parts)
-
-                        # 发送媒体组
-                        send_kwargs = {
-                            'chat_id': chat_id,
-                            'media': chunk,
-                            'timeout': 180
-                        }
-
-                        # 如果有原始消息，则回复该消息
-                        if original_message:
-                            send_kwargs['reply_to_message_id'] = original_message.message_id
-
-                        bot.send_media_group(**send_kwargs)
-
-                    except Exception as e:
-                        logger.error(f"发送媒体组失败: {e}")
-                        # 备用方案：逐个发送
-                        for media_index, media_item in enumerate(chunk):
-                            try:
-                                caption = None
-                                # 只在第一个媒体项目添加caption
-                                if media_index == 0 and i == 0:
-                                    caption_parts = []
-                                    if work_info:
-                                        caption_parts.append(work_info)
-                                    caption_parts.append(f"📁 共 {len(download_urls)} 个文件")
-                                    if total_chunks > 1:
-                                        caption_parts.append(f"🎁 包裹: [{current_chunk}/{total_chunks}]")
-                                    caption = "\n\n".join(caption_parts)
-
-                                # 准备发送参数
-                                send_kwargs = {
-                                    'chat_id': chat_id,
-                                    'caption': caption,
-                                    'timeout': 120
-                                }
-
-                                # 如果有原始消息，则回复该消息
-                                if original_message:
-                                    send_kwargs['reply_to_message_id'] = original_message.message_id
-
-                                if isinstance(media_item, InputMediaVideo):
-                                    send_kwargs['video'] = media_item.media
-                                    bot.send_video(**send_kwargs)
-                                else:
-                                    send_kwargs['photo'] = media_item.media
-                                    bot.send_photo(**send_kwargs)
-                            except Exception as single_error:
-                                logger.error(f"单独发送媒体失败: {single_error}")
+                return await send_media_with_retry_option(
+                    chat_id, media_group, work_info, original_message, url
+                )
+            else:
+                logger.warning(f"没有可发送的媒体内容: {url}")
+                return False
 
             return True
 
